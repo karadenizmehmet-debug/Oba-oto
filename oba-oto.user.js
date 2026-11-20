@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.3
+// @version      1.3.1
 // @description  Video bitince "Sonraki/İleri/Devam" düğmesine basar, sıradaki videoyu başlatır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
 // @match        *://oba.gov.tr/*
-// @homepageURL  https://karadenizmehmet-debug.github.io/oba-oto/
-// @updateURL    https://karadenizmehmet-debug.github.io/oba-oto/oba-oto.user.js
-// @downloadURL  https://karadenizmehmet-debug.github.io/oba-oto/oba-oto.user.js
+// @homepageURL  https://karadenizmehmet-debug.github.io/Oba-oto/
+// @updateURL    https://karadenizmehmet-debug.github.io/Oba-oto/oba-oto.user.js
+// @downloadURL  https://karadenizmehmet-debug.github.io/Oba-oto/oba-oto.user.js
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
