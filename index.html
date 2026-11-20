@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ÖBA Oto</title>
+<meta name="author" content="Mehmet Karadeniz, 2026-2027">
+<meta name="description" content="ÖBA videolarında otomatik ilerleme ve soru gelince sesli uyarı.">
+<style>
+  :root {
+    --bg: #f4f6f8; --kart: #ffffff; --yazi: #1d2730; --soluk: #5d6b78;
+    --ana: #1b7f3b; --ana-yazi: #fff; --cizgi: #dfe4e8; --uyari: #b45309;
+  }
+  [data-tema="gece"] {
+    --bg: #11161b; --kart: #1b232b; --yazi: #e6ebef; --soluk: #9aa7b3;
+    --ana: #2ea05a; --ana-yazi: #fff; --cizgi: #2b3640; --uyari: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--yazi);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px;
+    padding: 12px 16px; background: var(--kart); border-bottom: 1px solid var(--cizgi);
+  }
+  header h1 { margin: 0; font-size: 18px; flex: 1; }
+  header h1 small { font-weight: 500; color: var(--soluk); font-size: 13px; margin-left: 6px; }
+  .ikon {
+    border: 1px solid var(--cizgi); background: transparent; color: var(--yazi);
+    border-radius: 10px; min-width: 44px; height: 40px; padding: 0 10px; font-size: 15px; cursor: pointer;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  .sekme { display: flex; gap: 8px; margin-bottom: 14px; }
+  .sekme button {
+    flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--cizgi);
+    background: var(--kart); color: var(--yazi); font-size: 15px; cursor: pointer;
+  }
+  .sekme button.secili { background: var(--ana); color: var(--ana-yazi); border-color: var(--ana); }
+  .adim {
+    display: flex; gap: 12px; background: var(--kart); border: 1px solid var(--cizgi);
+    border-radius: 14px; padding: 14px; margin-bottom: 12px;
+  }
+  .no {
+    flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--ana);
+    color: var(--ana-yazi); display: grid; place-items: center; font-weight: 700;
+  }
+  .adim h2 { margin: 2px 0 4px; font-size: 16px; }
+  .adim p { margin: 0 0 10px; color: var(--soluk); font-size: 14px; }
+  .btn {
+    display: inline-block; padding: 11px 16px; border-radius: 10px; background: var(--ana);
+    color: var(--ana-yazi); text-decoration: none; font-weight: 600; border: 0; font-size: 15px; cursor: pointer;
+  }
+  .btn.ikincil { background: transparent; color: var(--yazi); border: 1px solid var(--cizgi); }
+  .not { font-size: 13px; color: var(--uyari); margin-top: 8px; }
+  .gizli { display: none; }
+  footer { text-align: center; color: var(--soluk); font-size: 12px; padding: 20px; }
+  ul { margin: 0; padding-left: 18px; color: var(--soluk); font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ÖBA Oto <small id="surum"></small></h1>
+  <button class="ikon" id="tema" title="Gece / gündüz">🌙</button>
+  <button class="ikon" id="paylas" title="Paylaş">Paylaş</button>
+</header>
+
+<main>
+  <div class="sekme">
+    <button id="s-tel">📱 Telefon</button>
+    <button id="s-pc">💻 Bilgisayar</button>
+  </div>
+
+  <!-- TELEFON -->
+  <section id="tel">
+    <div class="adim"><div class="no">1</div><div>
+      <h2>Firefox'u kur</h2>
+      <p>Chrome ve Samsung Internet betik çalıştırmıyor. Firefox çalıştırıyor.</p>
+      <a class="btn" href="https://play.google.com/store/apps/details?id=org.mozilla.firefox" target="_blank" rel="noopener">Play Store'da aç</a>
+    </div></div>
+
+    <div class="adim"><div class="no">2</div><div>
+      <h2>Bu sayfayı Firefox'ta aç</h2>
+      <p>Sonraki adımlar Firefox içinde yapılmalı.</p>
+      <button class="btn ikincil" id="kopyala">Adresi kopyala</button>
+    </div></div>
+
+    <div class="adim"><div class="no">3</div><div>
+      <h2>Tampermonkey'i ekle</h2>
+      <p>Açılan sayfada "Firefox'a ekle"ye dokun.</p>
+      <a class="btn" href="https://addons.mozilla.org/android/addon/tampermonkey/" target="_blank" rel="noopener">Tampermonkey</a>
+    </div></div>
+
+    <div class="adim"><div class="no">4</div><div>
+      <h2>Betiği kur</h2>
+      <p>Tampermonkey kurulum ekranı açılır, "Yükle"ye dokun. Yeni sürümler kendiliğinden gelir.</p>
+      <a class="btn kur" href="oba-oto.user.js">Betiği kur</a>
+    </div></div>
+
+    <div class="adim"><div class="no">5</div><div>
+      <h2>Sesi ve titreşimi dene</h2>
+      <p>Soru gelince böyle uyaracak. Telefon sessizdeyse yalnızca titrer.</p>
+      <button class="btn ikincil test">🔔 Uyarıyı dene</button>
+    </div></div>
+
+    <div class="adim"><div class="no">6</div><div>
+      <h2>ÖBA'yı aç</h2>
+      <ul>
+        <li>İlk videoda bir kez oynat'a bas.</li>
+        <li>Ekranı açık, Firefox'u önde tut. Ekran kapanırsa video durur.</li>
+        <li>Ekran zaman aşımını uzat: Ayarlar → Ekran.</li>
+      </ul>
+      <p></p>
+      <a class="btn" href="https://www.oba.gov.tr" target="_blank" rel="noopener">ÖBA'ya git</a>
+    </div></div>
+  </section>
+
+  <!-- BİLGİSAYAR -->
+  <section id="pc" class="gizli">
+    <div class="adim"><div class="no">1</div><div>
+      <h2>Tampermonkey'i ekle</h2>
+      <p>Tarayıcına göre seç.</p>
+      <a class="btn" href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank" rel="noopener">Chrome / Edge</a>
+      <a class="btn ikincil" href="https://addons.mozilla.org/firefox/addon/tampermonkey/" target="_blank" rel="noopener">Firefox</a>
+      <div class="not">Chrome'da: Eklentiler → Tampermonkey → Ayrıntılar → "Kullanıcı komut dosyalarına izin ver" açık olmalı.</div>
+    </div></div>
+
+    <div class="adim"><div class="no">2</div><div>
+      <h2>Betiği kur</h2>
+      <p>Tampermonkey kurulum ekranı açılır, "Yükle"ye tıkla.</p>
+      <a class="btn kur" href="oba-oto.user.js">Betiği kur</a>
+    </div></div>
+
+    <div class="adim"><div class="no">3</div><div>
+      <h2>Sesi dene</h2>
+      <p>Soru gelince böyle uyaracak.</p>
+      <button class="btn ikincil test">🔔 Uyarıyı dene</button>
+    </div></div>
+
+    <div class="adim"><div class="no">4</div><div>
+      <h2>ÖBA'yı aç</h2>
+      <ul>
+        <li>İlk videoda bir kez oynat'a tıkla.</li>
+        <li>Sekme arkada kalabilir. Soru gelince başlıkta "❓ SORU VAR" yazar.</li>
+      </ul>
+      <p></p>
+      <a class="btn" href="https://www.oba.gov.tr" target="_blank" rel="noopener">ÖBA'ya git</a>
+    </div></div>
+  </section>
+
+  <div class="adim"><div class="no">i</div><div>
+    <h2>Ne yapar, ne yapmaz</h2>
+    <ul>
+      <li>Video bitince "Sonraki / İleri / Devam" düğmesine basar.</li>
+      <li>Soru gelince durur, cevap verilene kadar 5 sn'de bir öter ve titretir.</li>
+      <li>ÖBA sayfasında sağ alttaki rozetle açılıp kapanır.</li>
+      <li>Videoyu hızlandırmaz, atlamaz, soruları cevaplamaz.</li>
+    </ul>
+  </div></div>
+</main>
+
+<footer>© Mehmet Karadeniz, 2026-2027</footer>
+
+<script>
+  const SURUM = 'v1.3';
+  document.getElementById('surum').textContent = SURUM;
+
+  // Tema
+  const temaBtn = document.getElementById('tema');
+  const temaUygula = (t) => {
+    document.documentElement.dataset.tema = t;
+    temaBtn.textContent = t === 'gece' ? '☀️' : '🌙';
+  };
+  let tema = 'gunduz';
+  try { tema = localStorage.getItem('obaOtoTema') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'gece' : 'gunduz'); } catch (e) {}
+  temaUygula(tema);
+  temaBtn.onclick = () => {
+    tema = tema === 'gece' ? 'gunduz' : 'gece';
+    temaUygula(tema);
+    try { localStorage.setItem('obaOtoTema', tema); } catch (e) {}
+  };
+
+  // Paylaş
+  document.getElementById('paylas').onclick = async () => {
+    const veri = { title: 'ÖBA Oto', text: 'ÖBA videolarında otomatik ilerleme, soru gelince sesli uyarı.', url: location.href };
+    if (navigator.share) { try { await navigator.share(veri); } catch (e) {} }
+    else { await navigator.clipboard.writeText(location.href); alert('Bağlantı kopyalandı.'); }
+  };
+
+  // Sekmeler: cihaza göre varsayılan
+  const tel = document.getElementById('tel'), pc = document.getElementById('pc');
+  const sTel = document.getElementById('s-tel'), sPc = document.getElementById('s-pc');
+  const goster = (hangi) => {
+    tel.classList.toggle('gizli', hangi !== 'tel');
+    pc.classList.toggle('gizli', hangi !== 'pc');
+    sTel.classList.toggle('secili', hangi === 'tel');
+    sPc.classList.toggle('secili', hangi === 'pc');
+  };
+  sTel.onclick = () => goster('tel');
+  sPc.onclick = () => goster('pc');
+  goster(/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? 'tel' : 'pc');
+
+  // Adres kopyala
+  document.getElementById('kopyala').onclick = async (e) => {
+    try { await navigator.clipboard.writeText(location.href); e.target.textContent = 'Kopyalandı ✓'; }
+    catch (err) { prompt('Adresi kopyala:', location.href); }
+  };
+
+  // Uyarı testi (betikteki ile aynı ses)
+  let ses = null;
+  const bip = () => {
+    try {
+      if (!ses) ses = new (window.AudioContext || window.webkitAudioContext)();
+      if (ses.state === 'suspended') ses.resume();
+      [0, 0.25, 0.5].forEach((g) => {
+        const o = ses.createOscillator(), k = ses.createGain();
+        o.frequency.value = 880; k.gain.value = 0.6;
+        o.connect(k); k.connect(ses.destination);
+        o.start(ses.currentTime + g); o.stop(ses.currentTime + g + 0.15);
+      });
+    } catch (e) {}
+    try { navigator.vibrate && navigator.vibrate([300, 150, 300]); } catch (e) {}
+  };
+  document.querySelectorAll('.test').forEach((b) => (b.onclick = bip));
+</script>
+</body>
+</html>
