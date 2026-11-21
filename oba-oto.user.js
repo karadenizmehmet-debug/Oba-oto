@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.8
+// @version      1.9
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -328,18 +328,31 @@
 
     const perde = document.createElement('div');
     Object.assign(perde.style, {
-      position: 'fixed', inset: '0', background: '#000', opacity: '0.92', zIndex: 2147483646,
-      display: 'none', color: '#555', font: '14px sans-serif',
+      position: 'fixed', inset: '0', background: '#000', zIndex: 2147483647,
+      display: 'none', color: '#1a1a1a', font: '13px sans-serif',
       alignItems: 'center', justifyContent: 'center', textAlign: 'center'
     });
     perde.textContent = 'ÖBA Oto çalışıyor · açmak için dokun';
     document.body.appendChild(perde);
 
     let sonDokunma = Date.now();
+    const tamEkran = () => {
+      const k = document.documentElement;
+      if (document.fullscreenElement || !k.requestFullscreen) return;
+      k.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+    };
+    const rozetKutusu = () => document.getElementById('oba-oto-rozet');
+    const kartart = () => {
+      perde.style.display = 'flex';
+      const k = rozetKutusu(); if (k) k.style.display = 'none'; // rozet de ışık yakmasın
+    };
     const perdeKaldir = (e) => {
       sonDokunma = Date.now();
       if (perde.style.display !== 'none') {
         perde.style.display = 'none';
+        const k = rozetKutusu(); if (k) k.style.display = 'flex';
+        // Tam ekrana geç: sonraki karartma durum çubuğu ve adres çubuğu dahil tüm ekranı kaplar
+        tamEkran();
         if (e && e.target === perde) { e.preventDefault(); e.stopPropagation(); }
       }
     };
@@ -350,8 +363,8 @@
 
     setInterval(() => {
       const soru = uyariDongusu !== null;
-      if (soru) { perde.style.display = 'none'; return; } // soru varsa ekran görünsün
-      if (acik && Date.now() - sonDokunma > KARARTMA_SN * 1000) perde.style.display = 'flex';
+      if (soru) { if (perde.style.display !== 'none') perdeKaldir(); return; } // soru varsa ekran görünsün
+      if (acik && perde.style.display === 'none' && Date.now() - sonDokunma > KARARTMA_SN * 1000) kartart();
     }, 1000);
   }
   // Kilit beklenirken yenilendiyse kaldığı yerden devam et
