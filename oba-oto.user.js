@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.7
+// @version      1.8
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -272,18 +272,30 @@
     }, BEKLEME_MS);
   };
 
+  // Video başta duruyorsa başlatmayı dene. Tarayıcı sesli otomatik oynatmayı
+  // engelleyebilir; o zaman ekrana ilk dokunuşta ya da sayfaya dönüşte tekrar dener.
+  const oynatmayiDene = () => {
+    if (!acik) return;
+    document.querySelectorAll('video').forEach((v) => {
+      if (!v.paused || v.ended || v.currentTime > 1) return; // kullanıcı ortada durdurduysa dokunma
+      try {
+        const oynat = v.play();
+        if (oynat && oynat.then) oynat.then(() => durum(''), () => durum('Oynat\'a bir kez dokun'));
+      } catch (e) {}
+    });
+  };
+  ['touchend', 'click'].forEach((t) => document.addEventListener(t, () => setTimeout(oynatmayiDene, 300), true));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') setTimeout(oynatmayiDene, 500);
+  });
+
   const videolariBagla = () => {
     document.querySelectorAll('video').forEach((v) => {
       if (v.dataset.obaOto) return;
       v.dataset.obaOto = '1';
       v.addEventListener('ended', ilerle);
-      if (acik && v.paused && !v.ended && v.currentTime === 0) {
-        try {
-          const oynat = v.play();
-          if (oynat && oynat.then) oynat.then(() => durum(''), () => durum('Oynat\'a bir kez dokun'));
-        } catch (e) {}
-      }
     });
+    oynatmayiDene();
   };
 
   // Yedek: "ended" olayı kaçarsa bitmiş videoyu yoklamayla yakala
