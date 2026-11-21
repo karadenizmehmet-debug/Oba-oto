@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.6
+// @version      1.7
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -120,9 +120,9 @@
     for (const e of satir.querySelectorAll('*')) {
       const sinif = (e.getAttribute('class') || '') + ' ' + (e.getAttribute('data-icon') || '') +
         ' ' + (e.getAttribute('src') || '') + ' ' + (e.getAttribute('alt') || '');
-      if (/check|tick|success|complete|tamam|done|izlendi/i.test(sinif)) return true;
+      if (/check|tick|complete|tamam|done|izlendi/i.test(sinif)) return true;
     }
-    return /[✓✔]/.test(satir.textContent);
+    return /[✓✔]|check_circle/.test(satir.textContent);
   };
 
   const bolumDurumlari = () => {
@@ -133,8 +133,43 @@
     });
   };
 
-  // İzlenmemiş ve kilitsiz ilk bölüm
+  // --- ÖBA oynatma sayfasına özel (a.course-player-object-item listesi) ---
+  // Simge metni: check_circle = bitti, timelapse = yarım, radio_button_unchecked = başlanmadı
+  // isDisabled sınıfı = kilitli
+  const obaListesi = () => [...document.querySelectorAll('a.course-player-object-item')];
+  const obaKilitli = (a) => a.classList.contains('isDisabled');
+  const obaSuanki = (liste) => liste.findIndex((a) => a.pathname === location.pathname);
+
+  const BEKLEYEN = 'obaOtoBekleyen';
+  let denemeSayisi = 0;
+
+  const obaSonraki = () => {
+    const liste = obaListesi();
+    if (!liste.length) return undefined; // ÖBA listesi yok, genel yönteme geç
+    const i = obaSuanki(liste);
+    const sonraki = i >= 0 ? liste[i + 1] : liste.find((a) => !obaKilitli(a));
+    if (!sonraki) { durum('Son bölüm, eğitim bitti'); return null; }
+    if (obaKilitli(sonraki)) {
+      // ÖBA kilidi birkaç saniye geç açabilir: bekle, olmazsa sayfayı yenile
+      denemeSayisi++;
+      if (denemeSayisi <= 8) {
+        durum(`Sonraki kilitli, bekleniyor (${denemeSayisi}/8)`);
+        setTimeout(ilerle, 3000);
+      } else {
+        durum('Kilit açılmadı, sayfa yenileniyor');
+        sessionStorage.setItem(BEKLEYEN, location.pathname);
+        location.reload();
+      }
+      return null;
+    }
+    denemeSayisi = 0;
+    return sonraki;
+  };
+
+  // İzlenmemiş ve kilitsiz ilk bölüm (ÖBA listesi bulunamazsa genel yöntem)
   const sonrakiBolum = () => {
+    const oba = obaSonraki();
+    if (oba !== undefined) return oba;
     const d = bolumDurumlari();
     const hedef = d.find((b) => !b.bitti && !b.kilit);
     if (!hedef) {
@@ -229,7 +264,10 @@
       const ad = (hedef.textContent || hedef.value || '').trim().slice(0, 40);
       durum('Açılıyor: ' + ad);
       hedef.scrollIntoView({ block: 'center' });
-      (hedef.closest('a, button, [role="button"], [onclick]') || hedef).click();
+      const tik = hedef.closest('a, button, [role="button"], [onclick]') || hedef;
+      tik.click();
+      // Tıklama sayfayı değiştirmezse bağlantıya doğrudan git
+      if (tik.href) setTimeout(() => { if (location.href !== tik.href) location.href = tik.href; }, 3000);
       setTimeout(videolariBagla, 1500);
     }, BEKLEME_MS);
   };
@@ -303,6 +341,11 @@
       if (soru) { perde.style.display = 'none'; return; } // soru varsa ekran görünsün
       if (acik && Date.now() - sonDokunma > KARARTMA_SN * 1000) perde.style.display = 'flex';
     }, 1000);
+  }
+  // Kilit beklenirken yenilendiyse kaldığı yerden devam et
+  if (sessionStorage.getItem(BEKLEYEN) === location.pathname) {
+    sessionStorage.removeItem(BEKLEYEN);
+    setTimeout(ilerle, 3000);
   }
   videolariBagla();
 })();
