@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.4
+// @version      1.6
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -34,6 +34,24 @@
 
   // Sadece üst pencerede aç/kapa rozeti göster
   if (window.top === window.self) {
+    const kutu = document.createElement('div');
+    kutu.id = 'oba-oto-rozet';
+    Object.assign(kutu.style, {
+      position: 'fixed', bottom: '12px', right: '12px', zIndex: 2147483647,
+      display: 'flex', gap: '6px', alignItems: 'flex-end'
+    });
+    const tani = document.createElement('div');
+    tani.textContent = '?';
+    Object.assign(tani.style, {
+      background: '#334', color: '#fff', borderRadius: '8px', padding: '6px 10px',
+      font: 'bold 13px sans-serif', cursor: 'pointer', boxShadow: '0 2px 6px #0005'
+    });
+    tani.title = 'Tanı bilgisini kopyala';
+    tani.onclick = async () => {
+      const metin = taniMetni();
+      try { await navigator.clipboard.writeText(metin); durum('Tanı kopyalandı, Claude\'a yapıştır'); }
+      catch (e) { prompt('Kopyala:', metin); }
+    };
     const rozet = document.createElement('div');
     rozetGuncelle = () => {
       rozet.textContent = (acik ? '▶ Oto-ilerle: AÇIK' : '⏸ Oto-ilerle: KAPALI') +
@@ -41,7 +59,6 @@
       rozet.style.background = acik ? '#1b7f3b' : '#777';
     };
     Object.assign(rozet.style, {
-      position: 'fixed', bottom: '12px', right: '12px', zIndex: 2147483647,
       color: '#fff', padding: '6px 10px', borderRadius: '8px', whiteSpace: 'pre-line',
       font: '13px sans-serif', cursor: 'pointer', boxShadow: '0 2px 6px #0005', maxWidth: '70vw'
     });
@@ -51,7 +68,8 @@
       rozetGuncelle();
     };
     rozetGuncelle();
-    document.body.appendChild(rozet);
+    kutu.append(tani, rozet);
+    document.body.appendChild(kutu);
   }
 
   const gorunur = (el) => {
@@ -60,70 +78,78 @@
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
   };
 
-  // Kilitli / soluk bölüm mü? (Bölüm 2 gibi henüz açılmamış olanlar)
-  const kilitli = (el) => {
-    for (let e = el, i = 0; e && e !== document.body && i < 4; e = e.parentElement, i++) {
+  // Bölüm adları süre içerir: "Giriş (1dk 26sn)". Metin düğümünden bul, etiket türüne bakma.
+  const bolumler = () => {
+    const sonuc = [];
+    const gezgin = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = gezgin.nextNode())) {
+      if (!BOLUM_METNI.test(n.nodeValue)) continue;
+      const el = n.parentElement;
+      if (!el || el.closest('#oba-oto-rozet') || sonuc.includes(el)) continue;
+      if (gorunur(el)) sonuc.push(el);
+    }
+    return sonuc;
+  };
+
+  // Bölümün satırı: içinde yalnızca bu bölüm olan en büyük üst öğe
+  const satirBul = (el, liste) => {
+    let satir = el;
+    while (satir.parentElement && satir.parentElement !== document.body &&
+           liste.filter((x) => satir.parentElement.contains(x)).length === 1) {
+      satir = satir.parentElement;
+    }
+    return satir;
+  };
+
+  // Kilitli / soluk mu? (henüz açılmamış bölümler soluk görünür)
+  const kilitli = (el, satir) => {
+    for (let e = el; e && e !== satir.parentElement; e = e.parentElement) {
       const s = getComputedStyle(e);
       if (parseFloat(s.opacity) < 0.8 || s.pointerEvents === 'none') return true;
-      if (/disabled|locked|pasif|kilit/i.test(e.className || '')) return true;
-      if (e.getAttribute && e.getAttribute('aria-disabled') === 'true') return true;
+      if (/disabled|locked|pasif|kilit|passive/i.test(e.getAttribute('class') || '')) return true;
+      if (e.getAttribute('aria-disabled') === 'true' || e.hasAttribute('disabled')) return true;
     }
+    const renk = getComputedStyle(el).color.match(/[\d.]+/g);
+    if (renk && renk.length >= 4 && parseFloat(renk[3]) < 0.7) return true;
     return false;
   };
 
-  // Bölümün satırında yeşil tik var mı?
-  const tamamlandi = (el) => {
-    const satir = el.closest('li, tr, .row, [class*="item"], [class*="lesson"], [class*="ders"]') || el.parentElement;
-    if (!satir) return false;
-    if (/success|complete|tamam|done|check/i.test(satir.innerHTML.slice(0, 2000))) {
-      // Turuncu halka (devam ediyor) ile yeşil tik ayrımı: renge bak
-      for (const ikon of satir.querySelectorAll('svg, i, img, span')) {
-        if (ikon === el || el.contains(ikon)) continue;
-        const s = getComputedStyle(ikon);
-        const renk = (s.color + ' ' + s.backgroundColor + ' ' + s.fill).match(/\d+/g);
-        if (!renk) continue;
-        for (let i = 0; i + 2 < renk.length; i += 3) {
-          const [r, g, b] = renk.slice(i, i + 3).map(Number);
-          if (g > 120 && g > r + 40 && g > b + 20) return true; // yeşil
-        }
-      }
+  // Satırdaki simgede tik (check) varsa bölüm izlenmiş
+  const tamamlandi = (satir) => {
+    for (const e of satir.querySelectorAll('*')) {
+      const sinif = (e.getAttribute('class') || '') + ' ' + (e.getAttribute('data-icon') || '') +
+        ' ' + (e.getAttribute('src') || '') + ' ' + (e.getAttribute('alt') || '');
+      if (/check|tick|success|complete|tamam|done|izlendi/i.test(sinif)) return true;
     }
-    return false;
+    return /[✓✔]/.test(satir.textContent);
   };
 
-  const bolumler = () =>
-    [...document.querySelectorAll('a, [role="button"], button, li > span, li > div')]
-      .filter((el) => BOLUM_METNI.test(el.textContent || '') && (el.textContent || '').length < 120)
-      // iç içe eşleşmelerde en içtekini tut
-      .filter((el, _, hepsi) => !hepsi.some((d) => d !== el && el.contains(d)));
-
-  const suankiBolum = (liste) => {
-    const adres = location.href.split('#')[0];
-    return liste.findIndex((el) => {
-      const href = el.href || (el.closest('a') && el.closest('a').href);
-      if (href && href.split('#')[0] === adres) return true;
-      const sinif = (el.className || '') + ' ' + ((el.closest('li') || {}).className || '');
-      return /active|aktif|selected|current/i.test(sinif);
+  const bolumDurumlari = () => {
+    const liste = bolumler();
+    return liste.map((el) => {
+      const satir = satirBul(el, liste);
+      return { el, satir, bitti: tamamlandi(satir), kilit: kilitli(el, satir) };
     });
   };
 
-  // Kapalı bölüm başlıklarını (+) aç ki içteki bölümler görünsün
-  const basliklariAc = () => {
-    document.querySelectorAll('[aria-expanded="false"], .collapsed').forEach((b) => {
-      if (gorunur(b)) b.click();
-    });
-  };
-
+  // İzlenmemiş ve kilitsiz ilk bölüm
   const sonrakiBolum = () => {
-    let liste = bolumler();
-    const i = suankiBolum(liste);
-    if (i >= 0 && liste[i + 1] && !kilitli(liste[i + 1])) return liste[i + 1];
-    // Yedek: tamamlanmamış ve kilitsiz ilk bölüm
-    let aday = liste.find((el) => gorunur(el) && !kilitli(el) && !tamamlandi(el));
-    if (aday) return aday;
-    basliklariAc();
-    liste = bolumler();
-    return liste.find((el) => gorunur(el) && !kilitli(el) && !tamamlandi(el)) || null;
+    const d = bolumDurumlari();
+    const hedef = d.find((b) => !b.bitti && !b.kilit);
+    if (!hedef) {
+      durum(`Bulunamadı (bölüm ${d.length}, biten ${d.filter((b) => b.bitti).length}, kilitli ${d.filter((b) => b.kilit).length})`);
+      return null;
+    }
+    return hedef.el;
+  };
+
+  // Tanı bilgisi: ilk izlenmemiş satırın HTML'i (bana göndermek için)
+  const taniMetni = () => {
+    const d = bolumDurumlari();
+    const satirlar = d.slice(0, 6).map((b, i) =>
+      `#${i} bitti=${b.bitti} kilit=${b.kilit} | ${b.satir.outerHTML.replace(/\s+/g, ' ').slice(0, 700)}`);
+    return `ÖBA Oto tanı ${location.pathname}\nbölüm=${d.length}\n` + satirlar.join('\n\n');
   };
 
   const sonrakiDugmesi = () => {
@@ -199,11 +225,11 @@
       ilerliyor = false;
       if (soruVar()) { uyar(); return; }
       const hedef = sonrakiDugmesi() || sonrakiBolum();
-      if (!hedef) { durum('Sıradaki bölüm bulunamadı'); return; }
+      if (!hedef) return;
       const ad = (hedef.textContent || hedef.value || '').trim().slice(0, 40);
       durum('Açılıyor: ' + ad);
       hedef.scrollIntoView({ block: 'center' });
-      (hedef.closest('a') || hedef).click();
+      (hedef.closest('a, button, [role="button"], [onclick]') || hedef).click();
       setTimeout(videolariBagla, 1500);
     }, BEKLEME_MS);
   };
@@ -214,7 +240,10 @@
       v.dataset.obaOto = '1';
       v.addEventListener('ended', ilerle);
       if (acik && v.paused && !v.ended && v.currentTime === 0) {
-        v.play().then(() => durum(''), () => durum('Oynat\'a bir kez dokun'));
+        try {
+          const oynat = v.play();
+          if (oynat && oynat.then) oynat.then(() => durum(''), () => durum('Oynat\'a bir kez dokun'));
+        } catch (e) {}
       }
     });
   };
@@ -230,5 +259,50 @@
     bitikSure = bitti ? bitikSure + 1 : 0;
     if (bitikSure === 3) ilerle(); // ~6 sn bitmiş durumda kaldıysa
   }, 2000);
+
+  // --- Ekranı açık tut + karartma (yalnızca üst pencerede) ---
+  if (window.top === window.self) {
+    const KARARTMA_SN = 30; // dokunulmazsa bu kadar saniye sonra karart
+    let kilit = null;
+
+    const ekraniAcikTut = async () => {
+      if (!acik || kilit || document.visibilityState !== 'visible' || !navigator.wakeLock) return;
+      try {
+        kilit = await navigator.wakeLock.request('screen');
+        kilit.addEventListener('release', () => { kilit = null; });
+      } catch (e) {}
+    };
+    document.addEventListener('visibilitychange', ekraniAcikTut);
+    ['click', 'touchstart'].forEach((t) => document.addEventListener(t, ekraniAcikTut, { capture: true, passive: true }));
+    setInterval(ekraniAcikTut, 10000);
+
+    const perde = document.createElement('div');
+    Object.assign(perde.style, {
+      position: 'fixed', inset: '0', background: '#000', opacity: '0.92', zIndex: 2147483646,
+      display: 'none', color: '#555', font: '14px sans-serif',
+      alignItems: 'center', justifyContent: 'center', textAlign: 'center'
+    });
+    perde.textContent = 'ÖBA Oto çalışıyor · açmak için dokun';
+    document.body.appendChild(perde);
+
+    let sonDokunma = Date.now();
+    const perdeKaldir = (e) => {
+      sonDokunma = Date.now();
+      if (perde.style.display !== 'none') {
+        perde.style.display = 'none';
+        if (e && e.target === perde) { e.preventDefault(); e.stopPropagation(); }
+      }
+    };
+    perde.addEventListener('touchstart', perdeKaldir, { passive: false });
+    perde.addEventListener('click', perdeKaldir);
+    ['touchstart', 'click', 'keydown', 'scroll'].forEach((t) =>
+      document.addEventListener(t, () => { sonDokunma = Date.now(); }, { capture: true, passive: true }));
+
+    setInterval(() => {
+      const soru = uyariDongusu !== null;
+      if (soru) { perde.style.display = 'none'; return; } // soru varsa ekran görünsün
+      if (acik && Date.now() - sonDokunma > KARARTMA_SN * 1000) perde.style.display = 'flex';
+    }, 1000);
+  }
   videolariBagla();
 })();
