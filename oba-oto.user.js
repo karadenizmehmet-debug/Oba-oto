@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.9
+// @version      1.10
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -184,7 +184,23 @@
     const d = bolumDurumlari();
     const satirlar = d.slice(0, 6).map((b, i) =>
       `#${i} bitti=${b.bitti} kilit=${b.kilit} | ${b.satir.outerHTML.replace(/\s+/g, ' ').slice(0, 700)}`);
-    return `ÖBA Oto tanı ${location.pathname}\nbölüm=${d.length}\n` + satirlar.join('\n\n');
+    // Etkileşimli içerikler (Storyline vb.) iframe içinde açılır: kaynaklarını ve düğmelerini listele
+    const cerceveler = [...document.querySelectorAll('iframe')].map((f, i) => {
+      let ic = 'erişilemiyor (başka alan adı)';
+      try {
+        const doc = f.contentDocument;
+        if (doc) {
+          const dugmeler = [...doc.querySelectorAll('button, [role="button"], a, [tabindex]')]
+            .filter((e) => e.getBoundingClientRect().width > 0)
+            .slice(0, 25)
+            .map((e) => `${e.tagName.toLowerCase()}#${e.id || '-'}.${String(e.className || '').slice(0, 40)} "${(e.innerText || e.getAttribute('aria-label') || '').trim().slice(0, 40)}"`);
+          ic = `video=${doc.querySelectorAll('video').length} audio=${doc.querySelectorAll('audio').length}\n   ` + dugmeler.join('\n   ');
+        }
+      } catch (e) {}
+      return `iframe#${i} ${f.src}\n   ${ic}`;
+    });
+    return `ÖBA Oto tanı ${location.pathname}\nbölüm=${d.length}\n` + satirlar.join('\n\n') +
+      `\n\nIFRAME (${cerceveler.length})\n` + cerceveler.join('\n');
   };
 
   const sonrakiDugmesi = () => {
