@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.10
+// @version      1.11
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -374,12 +374,17 @@
     };
     perde.addEventListener('touchstart', perdeKaldir, { passive: false });
     perde.addEventListener('click', perdeKaldir);
-    ['touchstart', 'click', 'keydown', 'scroll'].forEach((t) =>
+    ['touchstart', 'click', 'keydown', 'scroll', 'pointermove'].forEach((t) =>
       document.addEventListener(t, () => { sonDokunma = Date.now(); }, { capture: true, passive: true }));
 
     setInterval(() => {
       const soru = uyariDongusu !== null;
       if (soru) { if (perde.style.display !== 'none') perdeKaldir(); return; } // soru varsa ekran görünsün
+      // Yalnızca sayfada video oynarken karart. Etkileşimli içeriklerde (iframe) dokunuşlar
+      // buraya ulaşmaz; orada karartma kullanıcıyı kör eder.
+      const oynayan = [...document.querySelectorAll('video')].some((v) => !v.paused && !v.ended);
+      const iframeIcinde = document.activeElement && document.activeElement.tagName === 'IFRAME';
+      if (!oynayan || iframeIcinde) { sonDokunma = Date.now(); return; }
       if (acik && perde.style.display === 'none' && Date.now() - sonDokunma > KARARTMA_SN * 1000) kartart();
     }, 1000);
   }
