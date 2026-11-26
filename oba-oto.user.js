@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.17
+// @version      1.18
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -479,13 +479,15 @@
     let uyariZamani = 0;
     let sonVideoZamani = -1;
     let sonOzet = '';
-    let oynadi = false; // bu slaytın oynadığı görüldü mü (sayfa açılışında yanlış 'bitti' olmasın)
+    let ileriSayac = 0; // aynı slaytta SONRAKİ'ye kaç kez basıldı
+    let oynadi = false;
+    let bittiGonderildi = false; // bu slaytın oynadığı görüldü mü (sayfa açılışında yanlış 'bitti' olmasın)
 
     setInterval(() => {
       if (!acikMi()) return;
       const kap = document.querySelector('.slide-container') || document.body;
       const yeniImza = (kap.innerText || kap.textContent || '').slice(0, 120);
-      if (yeniImza !== imza) { imza = yeniImza; bitikSayac = 0; uyariZamani = 0; oynadi = false; }
+      if (yeniImza !== imza) { imza = yeniImza; bitikSayac = 0; uyariZamani = 0; oynadi = false; ileriSayac = 0; }
 
       // Zaman çizelgesi bitti mi? İlerleme çubuğuna ve slayttaki videolara bak.
       const p = ilerleme();
@@ -513,8 +515,16 @@
 
       if (soruVar()) { uyar('Soru var, cevap bekleniyor'); return; }
 
+      // Son slaytta SONRAKİ etkin görünür ama bir şey yapmaz: 2 basıştan sonra slayt değişmediyse içerik bitti say
       const ileri = sonrakiDugme();
-      if (ileri) { ust({ tip: 'durum', yazi: 'Sonraki slayt' }); ileri.click(); bitikSayac = 0; return; }
+      if (ileri && ileriSayac < 2) {
+        ileriSayac++;
+        ust({ tip: 'durum', yazi: 'Sonraki slayt' });
+        ileri.click();
+        bitikSayac = 0;
+        return;
+      }
+      if (ileri) { if (!bittiGonderildi) { bittiGonderildi = true; ust({ tip: 'bitti' }); } return; }
 
       const dugmeler = slaytDugmeleri();
       const ad = (b) => ((b.getAttribute('aria-label') || '') + ' ' + (b.innerText || '')).toLocaleLowerCase('tr');
