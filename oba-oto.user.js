@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.11
+// @version      1.12
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -16,6 +16,12 @@
 (function () {
   'use strict';
 
+  // Çerçeve (iframe) içinde: yalnızca SCORM/Storyline içeriğinde çalış, gerisini üst sayfa yapar
+  if (window.top !== window.self) {
+    if (/\/scorm-packages\//.test(location.pathname)) scormModu();
+    return;
+  }
+
   const ANAHTAR = 'obaOtoIlerleAcik';
   const DUGME_METNI = /^\s*(sonraki|ileri|devam|devam et|next)\b/i;
   // Bölüm bağlantıları süre içerir: "Bölüm 1 (12dk 28sn)"
@@ -25,6 +31,15 @@
   let acik = localStorage.getItem(ANAHTAR) !== '0';
   let durumYazisi = '';
   let rozetGuncelle = () => {};
+
+  // SCORM çerçevesinden gelen mesajlar
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || !e.data || !e.data.obaOto) return;
+    const m = e.data;
+    if (m.tip === 'durum') durum(m.yazi);
+    if (m.tip === 'uyari') { durum(m.yazi); bip(); }
+    if (m.tip === 'bitti') { durum('İçerik bitti, sonraki bölüme geçiliyor'); ilerle(); }
+  });
 
   const durum = (yazi) => {
     durumYazisi = yazi;
@@ -394,4 +409,90 @@
     setTimeout(ilerle, 3000);
   }
   videolariBagla();
+
+  // --- SCORM / Articulate Storyline içeriği (iframe içinde çalışır) ---
+  // Slayt zaman çizelgesi bitince oynatıcının SONRAKİ düğmesine basar. Slaytta tek bir
+  // "Başla/Devam" düğmesi varsa ona basar. Birden çok etkileşim ya da soru varsa
+  // dokunmaz, üst sayfaya uyarı gönderir: o adımları kullanıcı yapar.
+  function scormModu() {
+    const ust = (m) => { try { window.top.postMessage(Object.assign({ obaOto: true }, m), location.origin); } catch (e) {} };
+    const acikMi = () => localStorage.getItem('obaOtoIlerleAcik') !== '0';
+    const gor = (el) => {
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+    };
+    const pasif = (el) => el.disabled || el.getAttribute('aria-disabled') === 'true' ||
+      /disabled|cs-disabled/i.test(String(el.className || ''));
+
+    const ilerleme = () => {
+      const r = document.querySelector('#seek input');
+      if (!r) return null;
+      const max = parseFloat(r.max || r.getAttribute('aria-valuemax') || '100');
+      const v = parseFloat(r.value || r.getAttribute('aria-valuenow') || '0');
+      return max > 0 ? v / max : null;
+    };
+
+    const sonrakiDugme = () => [...document.querySelectorAll('button, [role="button"]')].find((b) => {
+      const ad = (b.id + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.innerText || '')).toLocaleLowerCase('tr');
+      return /(^|\s)(next|sonraki|ileri)/.test(ad) && gor(b) && !pasif(b);
+    });
+
+    const soruVar = () => [...document.querySelectorAll(
+      'input[type="radio"], input[type="checkbox"], input[type="text"], textarea, [role="radio"], [role="checkbox"]')]
+      .some((e) => gor(e) && !e.closest('#playback-controls, #outline-panel, #seek'));
+
+    const slaytDugmeleri = () => [...document.querySelectorAll('.slide-container button, .slide-container [role="button"], button.acc-button')]
+      .filter((b) => gor(b) && !pasif(b));
+
+    let imza = '';
+    let bitikSayac = 0;
+    let uyariZamani = 0;
+    let sonVideoZamani = -1;
+
+    setInterval(() => {
+      if (!acikMi()) return;
+      const kap = document.querySelector('.slide-container') || document.body;
+      const yeniImza = (kap.innerText || kap.textContent || '').slice(0, 120);
+      if (yeniImza !== imza) { imza = yeniImza; bitikSayac = 0; uyariZamani = 0; }
+
+      // Zaman çizelgesi bitti mi? İlerleme çubuğu yoksa slayttaki videolar durdu mu ona bak.
+      const p = ilerleme();
+      let bitti;
+      if (p !== null) bitti = p >= 0.99;
+      else {
+        const vler = [...document.querySelectorAll('video')];
+        const t = vler.reduce((a, v) => a + v.currentTime, 0);
+        bitti = vler.every((v) => v.paused || v.ended) && t === sonVideoZamani;
+        sonVideoZamani = t;
+      }
+      bitikSayac = bitti ? bitikSayac + 1 : 0;
+      if (bitikSayac < 2) return; // ~4 sn bitmiş kalsın
+
+      const uyar = (yazi) => {
+        if (Date.now() - uyariZamani < 15000) return;
+        uyariZamani = Date.now();
+        ust({ tip: 'uyari', yazi });
+      };
+
+      if (soruVar()) { uyar('Soru var, cevap bekleniyor'); return; }
+
+      const ileri = sonrakiDugme();
+      if (ileri) { ust({ tip: 'durum', yazi: 'Sonraki slayt' }); ileri.click(); bitikSayac = 0; return; }
+
+      const dugmeler = slaytDugmeleri();
+      const ad = (b) => ((b.getAttribute('aria-label') || '') + ' ' + (b.innerText || '')).toLocaleLowerCase('tr');
+      if (dugmeler.length === 1 && /ba[sş]la|devam|ileri|sonraki|next|start|t[ıi]kla/i.test(ad(dugmeler[0]))) {
+        ust({ tip: 'durum', yazi: 'Başla düğmesine basıldı' });
+        dugmeler[0].click();
+        bitikSayac = 0;
+        return;
+      }
+      if (dugmeler.length > 0) { uyar('Etkileşim bekleniyor: ekrandaki adımı yap'); return; }
+
+      // Ne sonraki ne düğme var: içerik sonu
+      if (bitikSayac === 2) ust({ tip: 'bitti' });
+    }, 2000);
+  }
 })();
