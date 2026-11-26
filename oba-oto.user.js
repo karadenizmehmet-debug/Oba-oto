@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.14
+// @version      1.16
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -153,7 +153,17 @@
   // isDisabled sınıfı = kilitli
   const obaListesi = () => [...document.querySelectorAll('a.course-player-object-item')];
   const obaKilitli = (a) => a.classList.contains('isDisabled');
-  const obaSuanki = (liste) => liste.findIndex((a) => a.pathname === location.pathname);
+  const obaSimge = (a) => {
+    const birim = a.closest('.meta-info-unit');
+    return birim ? birim.querySelector('.icon') : null;
+  };
+  // Şu anki bölüm: adres eşleşmesi, yoksa simgesi yeşil (text-success) olan
+  const obaSuanki = (liste) => {
+    const i = liste.findIndex((a) => a.pathname === location.pathname);
+    if (i >= 0) return i;
+    return liste.findIndex((a) => { const ic = obaSimge(a); return ic && ic.classList.contains('text-success'); });
+  };
+  const obaBitti = (a) => { const ic = obaSimge(a); return !!ic && /check_circle/.test(ic.textContent); };
 
   const BEKLEYEN = 'obaOtoBekleyen';
   let denemeSayisi = 0;
@@ -162,7 +172,8 @@
     const liste = obaListesi();
     if (!liste.length) return undefined; // ÖBA listesi yok, genel yönteme geç
     const i = obaSuanki(liste);
-    const sonraki = i >= 0 ? liste[i + 1] : liste.find((a) => !obaKilitli(a));
+    // Şu anki bulunamazsa: bitmemiş ve kilitsiz ilk bölüm (bitmişlere geri dönme)
+    const sonraki = i >= 0 ? liste[i + 1] : liste.find((a) => !obaKilitli(a) && !obaBitti(a));
     if (!sonraki) { durum('Son bölüm, eğitim bitti'); return null; }
     if (obaKilitli(sonraki)) {
       // ÖBA kilidi birkaç saniye geç açabilir: bekle, olmazsa sayfayı yenile
@@ -462,12 +473,13 @@
     let uyariZamani = 0;
     let sonVideoZamani = -1;
     let sonOzet = '';
+    let oynadi = false; // bu slaytın oynadığı görüldü mü (sayfa açılışında yanlış 'bitti' olmasın)
 
     setInterval(() => {
       if (!acikMi()) return;
       const kap = document.querySelector('.slide-container') || document.body;
       const yeniImza = (kap.innerText || kap.textContent || '').slice(0, 120);
-      if (yeniImza !== imza) { imza = yeniImza; bitikSayac = 0; uyariZamani = 0; }
+      if (yeniImza !== imza) { imza = yeniImza; bitikSayac = 0; uyariZamani = 0; oynadi = false; }
 
       // Zaman çizelgesi bitti mi? İlerleme çubuğuna ve slayttaki videolara bak.
       const p = ilerleme();
@@ -477,6 +489,7 @@
       const videoZamani = oynamis.reduce((a, v) => a + v.currentTime, 0);
       const durgun = oynamis.length > 0 && oynamis.every((v) => v.paused) && videoZamani === sonVideoZamani;
       sonVideoZamani = videoZamani;
+      if ((p !== null && p > 0.02 && p < 0.95) || oynamis.some((v) => !v.paused)) oynadi = true;
       const bitti = (p !== null && p >= 0.97) || videolarBitti || (p === null && durgun);
 
       // Durumu rozete yaz (değiştiğinde)
@@ -508,7 +521,8 @@
       if (dugmeler.length > 0) { uyar('Etkileşim bekleniyor: ekrandaki adımı yap'); return; }
 
       // Ne sonraki ne düğme var: içerik sonu
-      if (bitikSayac === 2) ust({ tip: 'bitti' });
+      // İçerik sonu: yalnızca bu slayt gerçekten oynadıysa (açılışta takılı kalan eski durumla geçme)
+      if (bitikSayac === 2 && oynadi) ust({ tip: 'bitti' });
     }, 2000);
   }
 })();
