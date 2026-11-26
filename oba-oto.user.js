@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.13
+// @version      1.14
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -461,6 +461,7 @@
     let bitikSayac = 0;
     let uyariZamani = 0;
     let sonVideoZamani = -1;
+    let sonOzet = '';
 
     setInterval(() => {
       if (!acikMi()) return;
@@ -468,16 +469,20 @@
       const yeniImza = (kap.innerText || kap.textContent || '').slice(0, 120);
       if (yeniImza !== imza) { imza = yeniImza; bitikSayac = 0; uyariZamani = 0; }
 
-      // Zaman çizelgesi bitti mi? İlerleme çubuğu yoksa slayttaki videolar durdu mu ona bak.
+      // Zaman çizelgesi bitti mi? İlerleme çubuğuna ve slayttaki videolara bak.
       const p = ilerleme();
-      let bitti;
-      if (p !== null) bitti = p >= 0.99;
-      else {
-        const vler = [...document.querySelectorAll('video')];
-        const t = vler.reduce((a, v) => a + v.currentTime, 0);
-        bitti = vler.every((v) => v.paused || v.ended) && t === sonVideoZamani;
-        sonVideoZamani = t;
-      }
+      const oynamis = [...document.querySelectorAll('video')].filter((v) => v.currentTime > 0 && v.duration > 0);
+      const videolarBitti = oynamis.length > 0 &&
+        oynamis.every((v) => v.ended || v.currentTime >= v.duration - 0.5);
+      const videoZamani = oynamis.reduce((a, v) => a + v.currentTime, 0);
+      const durgun = oynamis.length > 0 && oynamis.every((v) => v.paused) && videoZamani === sonVideoZamani;
+      sonVideoZamani = videoZamani;
+      const bitti = (p !== null && p >= 0.97) || videolarBitti || (p === null && durgun);
+
+      // Durumu rozete yaz (değiştiğinde)
+      const yuzde = p !== null ? Math.round(p * 100) : null;
+      const ozet = `Slayt %${yuzde === null ? '?' : yuzde}` + (videolarBitti ? ' · video bitti' : '');
+      if (ozet !== sonOzet) { sonOzet = ozet; ust({ tip: 'durum', yazi: ozet }); }
       bitikSayac = bitti ? bitikSayac + 1 : 0;
       if (bitikSayac < 2) return; // ~4 sn bitmiş kalsın
 
