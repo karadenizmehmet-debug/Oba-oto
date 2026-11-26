@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.16
+// @version      1.17
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -181,14 +181,20 @@
       if (denemeSayisi <= 8) {
         durum(`Sonraki kilitli, bekleniyor (${denemeSayisi}/8)`);
         setTimeout(ilerle, 3000);
-      } else {
+      } else if (sessionStorage.getItem(BEKLEYEN + 'Yenilendi') !== location.pathname) {
+        // Yalnızca bir kez yenile; yenileme döngüsüne girme
         durum('Kilit açılmadı, sayfa yenileniyor');
         sessionStorage.setItem(BEKLEYEN, location.pathname);
+        sessionStorage.setItem(BEKLEYEN + 'Yenilendi', location.pathname);
         location.reload();
+      } else {
+        durum('Sonraki bölüm kilitli: bu bölümü bitir');
+        denemeSayisi = 0;
       }
       return null;
     }
     denemeSayisi = 0;
+    sessionStorage.removeItem(BEKLEYEN + 'Yenilendi');
     return sonraki;
   };
 
