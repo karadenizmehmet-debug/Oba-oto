@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ÖBA Otomatik İlerle
 // @namespace    mehmetkaradeniz
-// @version      1.12
+// @version      1.13
 // @description  Video bitince listedeki sıradaki bölümü açar, soru gelince sesli uyarır.
 // @author       Mehmet Karadeniz, 2026-2027
 // @match        *://*.oba.gov.tr/*
@@ -214,7 +214,10 @@
       } catch (e) {}
       return `iframe#${i} ${f.src}\n   ${ic}`;
     });
-    return `ÖBA Oto tanı ${location.pathname}\nbölüm=${d.length}\n` + satirlar.join('\n\n') +
+    const ol = obaListesi();
+    const obaBilgi = `oba-liste=${ol.length} şu-an=${obaSuanki(ol)} ` +
+      ol.slice(0, 12).map((a) => `[${a.pathname.split('/').pop()}${obaKilitli(a) ? ' kilitli' : ''}]`).join(' ');
+    return `ÖBA Oto tanı ${location.pathname}\nbölüm=${d.length}\n${obaBilgi}\n` + satirlar.join('\n\n') +
       `\n\nIFRAME (${cerceveler.length})\n` + cerceveler.join('\n');
   };
 
@@ -443,8 +446,16 @@
       'input[type="radio"], input[type="checkbox"], input[type="text"], textarea, [role="radio"], [role="checkbox"]')]
       .some((e) => gor(e) && !e.closest('#playback-controls, #outline-panel, #seek'));
 
+    // Adı boş düğmeler ve video nesnelerinin oynat düğmeleri (…-button, yanında .mp4) etkileşim sayılmaz
     const slaytDugmeleri = () => [...document.querySelectorAll('.slide-container button, .slide-container [role="button"], button.acc-button')]
-      .filter((b) => gor(b) && !pasif(b));
+      .filter((b) => {
+        if (!gor(b) || pasif(b)) return false;
+        const ad = ((b.getAttribute('aria-label') || '') + ' ' + (b.innerText || b.textContent || '')).trim();
+        if (!ad) return false;
+        const es = b.id && b.id.endsWith('-button') && document.getElementById(b.id.slice(0, -7));
+        if (es && /\.(mp4|webm|mov)\b/i.test(es.textContent || '')) return false;
+        return true;
+      });
 
     let imza = '';
     let bitikSayac = 0;
